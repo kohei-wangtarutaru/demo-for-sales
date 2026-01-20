@@ -52,13 +52,24 @@ export default function Home() {
         営業デモ（入力）
       </div>
 
-      <main style={{ maxWidth: 520, margin: "0 auto", padding: 16 }}>
+      {/* ✅ ここ：スマホ幅で安定させる */}
+      <main
+        style={{
+          maxWidth: 420,
+          margin: "0 auto",
+          padding: "16px 12px",
+          boxSizing: "border-box"
+        }}
+      >
+        {/* ✅ ここ：padding込みでもはみ出さない */}
         <div
           style={{
             background: "#fff",
             border: "1px solid #dbdbdb",
             borderRadius: 12,
-            padding: 16
+            padding: 16,
+            boxSizing: "border-box",
+            width: "100%"
           }}
         >
           <h1 style={{ fontSize: 18, margin: 0, marginBottom: 8 }}>
@@ -119,7 +130,7 @@ export default function Home() {
               value={form.notes}
               onChange={onChange("notes")}
               placeholder="例）席数10、カウンター中心、日本酒のペアリングが強み…など"
-              style={{ ...inputStyle, height: 90, resize: "vertical" }}
+              style={{ ...inputStyle, height: 90, resize: "vertical", paddingTop: 10, paddingBottom: 10 }}
             />
           </Field>
 
@@ -182,5 +193,6 @@ const inputStyle = {
   padding: "0 12px",
   outline: "none",
   background: "#fff",
-  fontSize: 14
+  fontSize: 14,
+  boxSizing: "border-box"
 };
