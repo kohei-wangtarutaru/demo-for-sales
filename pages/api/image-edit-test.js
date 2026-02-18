@@ -20,10 +20,14 @@ function safeJson(text) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "OPENAI_API_KEY is missing" });
+  if (!apiKey) {
+    return res.status(500).json({ error: "OPENAI_API_KEY is missing" });
+  }
 
   try {
     const { imageDataUrl, prompt } = req.body || {};
@@ -34,43 +38,68 @@ export default async function handler(req, res) {
     const { mime, buf } = dataUrlToBuffer(imageDataUrl);
 
     const form = new FormData();
-    // ✅ この環境では edits の model は dall-e-2 指定が必要
-    form.append("model", "dall-e-2");
-    form.append("prompt", prompt);
+
+    // ✅ 再生成モデル（image-to-image）
+    form.append("model", "gpt-image-1");
+
+    // 強加工のための強め指示
+    const finalPrompt = `
+以下の画像を参考に、プロが撮り直したように再生成してください。
+- 構図を美しく整理
+- 光を整え、立体感を強調
+- 背景を自然に整理または改善
+- SNSで保存される完成度
+- 写真としてリアル（AIアート風にしない）
+- 元の料理・器の同一性はできるだけ維持
+
+追加指示:
+${prompt}
+`.trim();
+
+    form.append("prompt", finalPrompt);
     form.append("size", "1024x1024");
     form.append("n", "1");
-    // ✅ response_format は送らない（Unknown parameter回避）
+    form.append("response_format", "b64_json");
 
     const filename =
-      mime === "image/png" ? "input.png" : mime === "image/webp" ? "input.webp" : "input.jpg";
-    form.append("image", new Blob([buf], { type: mime }), filename);
+      mime === "image/png"
+        ? "reference.png"
+        : mime === "image/webp"
+        ? "reference.webp"
+        : "reference.jpg";
 
-    const resp = await fetch("https://api.openai.com/v1/images/edits", {
+    // referenceとして元画像を渡す
+    form.append("image[]", new Blob([buf], { type: mime }), filename);
+
+    const resp = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
       body: form
     });
 
     const text = await resp.text();
     if (!resp.ok) {
       return res.status(resp.status).json({
-        error: "OpenAI image edit error",
+        error: "OpenAI image generation error",
         status: resp.status,
         details: safeJson(text)
       });
     }
 
     const json = safeJson(text);
-
-    // 返りが url の場合が多い
-    const url = json?.data?.[0]?.url;
-    if (url) return res.status(200).json({ ok: true, imageUrl: url, mode: "url" });
-
-    // 念のため b64_json も見ておく
     const b64 = json?.data?.[0]?.b64_json;
-    if (b64) return res.status(200).json({ ok: true, imageDataUrl: `data:image/png;base64,${b64}`, mode: "b64_json" });
 
-    return res.status(500).json({ error: "Unexpected response format", raw: json });
+    if (!b64) {
+      return res.status(500).json({
+        error: "No b64_json returned",
+        raw: json
+      });
+    }
+
+    const out = `data:image/png;base64,${b64}`;
+    return res.status(200).json({ ok: true, imageDataUrl: out, mode: "reimagine" });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
