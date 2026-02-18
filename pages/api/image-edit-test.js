@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const { mime, buf } = dataUrlToBuffer(imageDataUrl);
 
     const form = new FormData();
-    form.append("model", "gpt-image-1");
+    form.append("model", "dall-e-2");
     form.append("prompt", prompt);
     form.append("size", "1024x1024");
     form.append("n", "1");
