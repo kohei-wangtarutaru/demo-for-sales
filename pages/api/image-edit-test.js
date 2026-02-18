@@ -34,11 +34,12 @@ export default async function handler(req, res) {
     const { mime, buf } = dataUrlToBuffer(imageDataUrl);
 
     const form = new FormData();
+    // ✅ この環境では edits の model は dall-e-2 指定が必要
     form.append("model", "dall-e-2");
     form.append("prompt", prompt);
     form.append("size", "1024x1024");
     form.append("n", "1");
-    form.append("response_format", "b64_json");
+    // ✅ response_format は送らない（Unknown parameter回避）
 
     const filename =
       mime === "image/png" ? "input.png" : mime === "image/webp" ? "input.webp" : "input.jpg";
@@ -60,12 +61,16 @@ export default async function handler(req, res) {
     }
 
     const json = safeJson(text);
-    const b64 = json?.data?.[0]?.b64_json;
-    if (!b64) return res.status(500).json({ error: "No b64_json returned", raw: json });
 
-    // 返却はdataURLにして返す
-    const out = `data:image/png;base64,${b64}`;
-    return res.status(200).json({ ok: true, imageDataUrl: out });
+    // 返りが url の場合が多い
+    const url = json?.data?.[0]?.url;
+    if (url) return res.status(200).json({ ok: true, imageUrl: url, mode: "url" });
+
+    // 念のため b64_json も見ておく
+    const b64 = json?.data?.[0]?.b64_json;
+    if (b64) return res.status(200).json({ ok: true, imageDataUrl: `data:image/png;base64,${b64}`, mode: "b64_json" });
+
+    return res.status(500).json({ error: "Unexpected response format", raw: json });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
