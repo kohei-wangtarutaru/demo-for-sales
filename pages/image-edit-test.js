@@ -3,6 +3,7 @@ import { useState } from "react";
 export default function ImageEditTest() {
   const [inputDataUrl, setInputDataUrl] = useState("");
   const [outputDataUrl, setOutputDataUrl] = useState("");
+  const [outputUrl, setOutputUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState("");
 
@@ -12,11 +13,14 @@ export default function ImageEditTest() {
 
   const onPick = async (file) => {
     setOutputDataUrl("");
+    setOutputUrl("");
     setLog("");
     if (!file) return;
 
-    const dataUrl = await fileToResizedDataURL(file, 1024, 0.86); // 軽量化
+    // ✅ DALL·E 2 edits 向け：正方形 1024x1024 の PNG にして送る
+    const dataUrl = await fileToSquarePngDataURL(file, 1024);
     setInputDataUrl(dataUrl);
+    setLog("画像を読み込みました（正方形PNGに変換済み）");
   };
 
   const run = async () => {
@@ -28,6 +32,7 @@ export default function ImageEditTest() {
     setLoading(true);
     setLog("リクエスト送信中…");
     setOutputDataUrl("");
+    setOutputUrl("");
 
     try {
       const r = await fetch("/api/image-edit-test", {
@@ -45,14 +50,17 @@ export default function ImageEditTest() {
         return;
       }
 
-      setOutputDataUrl(j.imageDataUrl);
-      setLog("成功：AI編集画像を受け取りました");
+      setOutputDataUrl(j.imageDataUrl || "");
+      setOutputUrl(j.imageUrl || "");
+      setLog(`成功：AI編集画像を受け取りました（mode=${j.mode}）`);
     } catch (e) {
       setLog(`例外: ${String(e)}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const showOutput = outputDataUrl || outputUrl;
 
   return (
     <div style={{ minHeight: "100vh", background: "#fafafa" }}>
@@ -83,7 +91,8 @@ export default function ImageEditTest() {
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>1枚アップ → AI編集 → 結果確認</div>
           <div style={{ fontSize: 12, color: "#666", lineHeight: 1.5, marginBottom: 12 }}>
             ここで「本当にAIが写真を強めに編集できるか」を単体で検証します。
-            成功したら次に、あなたの営業デモ（9グリッド）へ統合します。
+            <br />
+            ※ アップした画像は自動で <strong>正方形PNG(1024×1024)</strong> に変換して送信します。
           </div>
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -106,7 +115,7 @@ export default function ImageEditTest() {
                 style={{ display: "none" }}
               />
               <span style={{ fontWeight: 800 }}>画像を選ぶ</span>
-              <span style={{ fontSize: 12, color: "#666" }}>（長辺1024に縮小して送信）</span>
+              <span style={{ fontSize: 12, color: "#666" }}>（正方形PNGに変換）</span>
             </label>
 
             <button
@@ -153,7 +162,7 @@ export default function ImageEditTest() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           <div style={panelStyle}>
-            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>元画像</div>
+            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>元画像（送信するPNG）</div>
             {inputDataUrl ? (
               <img
                 src={inputDataUrl}
@@ -167,9 +176,9 @@ export default function ImageEditTest() {
 
           <div style={panelStyle}>
             <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>AI編集後</div>
-            {outputDataUrl ? (
+            {showOutput ? (
               <img
-                src={outputDataUrl}
+                src={showOutput}
                 alt="output"
                 style={{ width: "100%", borderRadius: 12, border: "1px solid #eee" }}
               />
@@ -191,23 +200,25 @@ const panelStyle = {
   boxSizing: "border-box"
 };
 
-async function fileToResizedDataURL(file, maxSide = 1024, jpegQuality = 0.86) {
+// ✅ 中央を正方形に切り出し → 1024x1024 PNG にする
+async function fileToSquarePngDataURL(file, size = 1024) {
   const src = await readAsDataURL(file);
   const img = await loadImage(src);
 
   const iw = img.width;
   const ih = img.height;
-  const scale = Math.min(1, maxSide / Math.max(iw, ih));
-  const w = Math.max(1, Math.round(iw * scale));
-  const h = Math.max(1, Math.round(ih * scale));
+  const side = Math.min(iw, ih);
+  const sx = Math.floor((iw - side) / 2);
+  const sy = Math.floor((ih - side) / 2);
 
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, w, h);
+  canvas.width = size;
+  canvas.height = size;
 
-  return canvas.toDataURL("image/jpeg", jpegQuality);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+
+  return canvas.toDataURL("image/png");
 }
 
 function readAsDataURL(file) {
