@@ -14,13 +14,36 @@ export default function ImageEditTest() {
   const onPick = async (file) => {
     setOutputDataUrl("");
     setOutputUrl("");
+    setInputDataUrl("");
     setLog("");
+
     if (!file) return;
 
-    // ✅ DALL·E 2 edits 向け：正方形 1024x1024 の PNG にして送る
-    const dataUrl = await fileToSquarePngDataURL(file, 1024);
-    setInputDataUrl(dataUrl);
-    setLog("画像を読み込みました（正方形PNGに変換済み）");
+    try {
+      // ★ここで失敗しやすい（HEIC等）
+      setLog(`読み込み中… filename=${file.name} type=${file.type || "(unknown)"} size=${file.size} bytes`);
+
+      // ✅ DALL·E 2 edits向け：正方形PNG(1024)化
+      const dataUrl = await fileToSquarePngDataURL(file, 1024);
+
+      if (!dataUrl?.startsWith("data:image/png;base64,")) {
+        throw new Error("PNG dataURL の生成に失敗しました（想定外の形式）");
+      }
+
+      setInputDataUrl(dataUrl);
+      setLog("画像を登録しました（正方形PNGに変換済み）");
+    } catch (e) {
+      setLog(
+        "画像登録に失敗しました。\n\n" +
+          "よくある原因：\n" +
+          "- HEIC形式（iPhoneの写真）がブラウザで読めない\n" +
+          "- 画像が壊れている/巨大すぎる\n\n" +
+          "対処：\n" +
+          "- 画像を一度「JPEG/PNG」で書き出してから選び直す\n" +
+          "- 別の画像で試す\n\n" +
+          `エラー詳細: ${String(e?.message || e)}`
+      );
+    }
   };
 
   const run = async () => {
@@ -90,8 +113,6 @@ export default function ImageEditTest() {
         >
           <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>1枚アップ → AI編集 → 結果確認</div>
           <div style={{ fontSize: 12, color: "#666", lineHeight: 1.5, marginBottom: 12 }}>
-            ここで「本当にAIが写真を強めに編集できるか」を単体で検証します。
-            <br />
             ※ アップした画像は自動で <strong>正方形PNG(1024×1024)</strong> に変換して送信します。
           </div>
 
@@ -200,13 +221,15 @@ const panelStyle = {
   boxSizing: "border-box"
 };
 
-// ✅ 中央を正方形に切り出し → 1024x1024 PNG にする
+// 中央を正方形に切り出し → 1024x1024 PNG にする
 async function fileToSquarePngDataURL(file, size = 1024) {
   const src = await readAsDataURL(file);
   const img = await loadImage(src);
 
   const iw = img.width;
   const ih = img.height;
+  if (!iw || !ih) throw new Error("画像サイズを取得できませんでした（形式非対応の可能性）");
+
   const side = Math.min(iw, ih);
   const sx = Math.floor((iw - side) / 2);
   const sy = Math.floor((ih - side) / 2);
@@ -234,7 +257,7 @@ function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error("画像を読み込めませんでした（形式非対応の可能性）"));
     img.crossOrigin = "anonymous";
     img.src = src;
   });
